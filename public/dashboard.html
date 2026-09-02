@@ -56,14 +56,42 @@ document.getElementById("fechaHoy").textContent =
 const API_URL = "https://fleshed-jittery-swiftly.ngrok-free.dev/query";
 const SQL_URL = "./consultas/tablero-1-inventario.sql";
 
-const EXCLUIR_SUMA = /id|codigo|sku|nombre|unidad|producto/i;
+const EXCLUIR_SUMA = /^(id|idproducto|codigoproducto|codigo|sku|nombreproducto|nombre|unidad)$/i;
+const OCULTAR_COLUMNAS = /^(unidad|cabreviatura)$/i;
 const RATIOS = {
     CostoUnitario: ["CostoTotalCompra", "CantidadCompra"],
     VentaUnitaria: ["VentaTotal", "CantidadVenta"],
     MermaDesecho: ["CantidadMerma", "CantidadCompra"]
 };
 
+const DECIMALES_1 = {
+    CantidadCompra: true,
+    CantidadVenta: true,
+    CantidadMerma: true,
+    ExistenciaActual: true
+};
+
+const DINERO_ENTERO = {
+    CostoTotalCompra: true,
+    VentaTotal: true,
+    CostoTotalMerma: true,
+    ValorInventario: true
+};
+
+const DINERO_2DEC = {
+    CostoUnitario: true,
+    VentaUnitaria: true
+};
+
+const PORCENTAJE_1 = {
+    MermaDesecho: true
+};
+
 let resultadosActuales = [];
+let columnasTabla = [];
+let numericasTabla = {};
+let filtrosTabla = {};
+let ordenTabla = { col: null, dir: 1 };
 let plantillaSql = null;
 let graficos = [];
 
@@ -83,6 +111,9 @@ function aNumero(valor) {
 }
 
 function esColumnaNumerica(nombre, rows) {
+    if (DECIMALES_1[nombre] || RATIOS[nombre] || DINERO_ENTERO[nombre] || DINERO_2DEC[nombre] || PORCENTAJE_1[nombre]) {
+        return true;
+    }
     if (EXCLUIR_SUMA.test(nombre)) {
         return false;
     }
@@ -104,13 +135,37 @@ function sumaColumna(rows, nombre) {
     }, 0);
 }
 
-function formatoNumero(valor) {
+function formatoNumero(valor, columna) {
     if (valor === null || valor === undefined || valor === "") {
         return "";
     }
     const n = aNumero(valor);
     if (n === null) {
         return String(valor);
+    }
+    if (PORCENTAJE_1[columna]) {
+        return (n * 100).toLocaleString("es-MX", {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        }) + " %";
+    }
+    if (DINERO_2DEC[columna]) {
+        return "$ " + n.toLocaleString("es-MX", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+    if (DINERO_ENTERO[columna]) {
+        const entero = Math.round(n);
+        return "$ " + entero.toLocaleString("es-MX", {
+            maximumFractionDigits: 0
+        });
+    }
+    if (DECIMALES_1[columna]) {
+        return n.toLocaleString("es-MX", {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1
+        });
     }
     const dec = Math.abs(n) >= 100 ? 2 : 4;
     return n.toLocaleString("es-MX", {
@@ -164,6 +219,8 @@ async function cargarTablero() {
 
     resultContainer.innerHTML = "";
     resultadosActuales = [];
+    filtrosTabla = {};
+    ordenTabla = { col: null, dir: 1 };
     destruirGraficos();
 
     if (!esFechaIso(fechaInicio) || !esFechaIso(fechaFin)) {
@@ -225,11 +282,131 @@ function mostrarPestana(nombre) {
     });
 }
 
+function celdaTexto(column, raw) {
+    if (numericasTabla[column]) {
+        return formatoNumero(raw, column);
+    }
+    if (raw === null || raw === undefined) {
+        return "";
+    }
+    if (typeof raw === "object") {
+        return JSON.stringify(raw);
+    }
+    return String(raw);
+}
+
+function filasVisibles() {
+    let rows = resultadosActuales.filter(function (row) {
+        return columnasTabla.every(function (column) {
+            const filtro = (filtrosTabla[column] || "").trim().toLowerCase();
+            if (!filtro) {
+                return true;
+            }
+            return celdaTexto(column, row[column]).toLowerCase().indexOf(filtro) !== -1;
+        });
+    });
+
+    if (ordenTabla.col) {
+        const col = ordenTabla.col;
+        const dir = ordenTabla.dir;
+        const numerica = numericasTabla[col];
+        rows = rows.slice().sort(function (a, b) {
+            const va = a[col];
+            const vb = b[col];
+            if (numerica) {
+                const na = aNumero(va);
+                const nb = aNumero(vb);
+                if (na === null && nb === null) {
+                    return 0;
+                }
+                if (na === null) {
+                    return 1;
+                }
+                if (nb === null) {
+                    return -1;
+                }
+                return (na - nb) * dir;
+            }
+            return String(va || "").localeCompare(String(vb || ""), "es", {
+                numeric: true,
+                sensitivity: "base"
+            }) * dir;
+        });
+    }
+
+    return rows;
+}
+
+function ordenarColumna(columna) {
+    if (ordenTabla.col === columna) {
+        ordenTabla.dir = ordenTabla.dir === 1 ? -1 : 1;
+    } else {
+        ordenTabla.col = columna;
+        ordenTabla.dir = 1;
+    }
+    document.querySelectorAll(".sort-ind").forEach(function (el) {
+        el.textContent = "";
+    });
+    const ind = document.querySelector('.sort-ind[data-col="' + columna + '"]');
+    if (ind) {
+        ind.textContent = ordenTabla.dir === 1 ? "▲" : "▼";
+    }
+    pintarCuerpoTabla();
+}
+
+function filtrarColumna(columna, valor) {
+    filtrosTabla[columna] = valor;
+    pintarCuerpoTabla();
+}
+
+function pintarCuerpoTabla() {
+    const tbody = document.getElementById("tablaCuerpo");
+    const tfoot = document.getElementById("tablaPie");
+    const count = document.getElementById("rowCount");
+    if (!tbody || !tfoot) {
+        return;
+    }
+
+    const rows = filasVisibles();
+    let html = "";
+
+    rows.forEach(function (row) {
+        html += "<tr>";
+        columnasTabla.forEach(function (column) {
+            html += "<td class=\"" + (numericasTabla[column] ? "num" : "") + "\">" +
+                escapeHtml(celdaTexto(column, row[column])) + "</td>";
+        });
+        html += "</tr>";
+    });
+
+    tbody.innerHTML = html || "<tr><td colspan=\"" + columnasTabla.length +
+        "\" class=\"empty\">Ningún registro coincide con el filtro.</td></tr>";
+
+    let pie = "<tr>";
+    columnasTabla.forEach(function (column, i) {
+        if (i === 0) {
+            pie += "<td>Total</td>";
+            return;
+        }
+        const total = totalColumna(column, rows);
+        pie += "<td class=\"" + (numericasTabla[column] ? "num" : "") + "\">" +
+            (total === null ? "" : escapeHtml(formatoNumero(total, column))) + "</td>";
+    });
+    pie += "</tr>";
+    tfoot.innerHTML = pie;
+
+    if (count) {
+        count.textContent = rows.length + " de " + resultadosActuales.length + " registros";
+    }
+}
+
 function mostrarResultados(data) {
 
     const resultContainer = document.getElementById("resultContainer");
     const rows = data.rows || [];
     resultadosActuales = rows;
+    filtrosTabla = {};
+    ordenTabla = { col: null, dir: 1 };
 
     if (rows.length === 0) {
         resultContainer.innerHTML = `
@@ -242,20 +419,19 @@ function mostrarResultados(data) {
         return;
     }
 
-    const columns = Object.keys(rows[0]);
-    const numericas = {};
-    columns.forEach(function (column) {
-        numericas[column] = esColumnaNumerica(column, rows) || !!RATIOS[column];
+    columnasTabla = Object.keys(rows[0]).filter(function (column) {
+        return !OCULTAR_COLUMNAS.test(column);
+    });
+    numericasTabla = {};
+    columnasTabla.forEach(function (column) {
+        numericasTabla[column] = esColumnaNumerica(column, rows) || !!RATIOS[column] || !!DECIMALES_1[column] || !!DINERO_ENTERO[column] || !!DINERO_2DEC[column] || !!PORCENTAJE_1[column];
     });
 
     let html = `
         <div class="result-header">
             <h2>Resultado</h2>
             <div class="result-actions">
-                <span class="row-count">
-                    ${data.rowCount}
-                    registro${data.rowCount === 1 ? "" : "s"}
-                </span>
+                <span class="row-count" id="rowCount"></span>
                 <button class="export" onclick="exportarExcel()">Exportar Excel</button>
             </div>
         </div>
@@ -269,40 +445,22 @@ function mostrarResultados(data) {
                     <thead><tr>
     `;
 
-    columns.forEach(function (column) {
-        html += "<th class=\"" + (numericas[column] ? "num" : "") + "\">" +
-            escapeHtml(column) + "</th>";
+    columnasTabla.forEach(function (column) {
+        html += "<th class=\"" + (numericasTabla[column] ? "num" : "") + "\">" +
+            "<button type=\"button\" class=\"th-sort\" onclick=\"ordenarColumna('" + column + "')\">" +
+            escapeHtml(column) +
+            "<span class=\"sort-ind\" data-col=\"" + column + "\"></span></button>" +
+            "<input class=\"th-filter\" placeholder=\"Filtrar\" " +
+            "oninput=\"filtrarColumna('" + column + "', this.value)\" " +
+            "onclick=\"event.stopPropagation()\"></th>";
     });
 
-    html += "</tr></thead><tbody>";
-
-    rows.forEach(function (row) {
-        html += "<tr>";
-        columns.forEach(function (column) {
-            const raw = row[column];
-            const texto = numericas[column] ? formatoNumero(raw) : (
-                raw === null || raw === undefined ? "" :
-                typeof raw === "object" ? JSON.stringify(raw) : String(raw)
-            );
-            html += "<td class=\"" + (numericas[column] ? "num" : "") + "\">" +
-                escapeHtml(texto) + "</td>";
-        });
-        html += "</tr>";
-    });
-
-    html += "</tbody><tfoot><tr>";
-    columns.forEach(function (column, i) {
-        if (i === 0) {
-            html += "<td>Total</td>";
-            return;
-        }
-        const total = totalColumna(column, rows);
-        html += "<td class=\"" + (numericas[column] ? "num" : "") + "\">" +
-            (total === null ? "" : escapeHtml(formatoNumero(total))) + "</td>";
-    });
-    html += "</tr></tfoot></table></div></div>";
-
-    html += `
+    html += `</tr></thead>
+                    <tbody id="tablaCuerpo"></tbody>
+                    <tfoot id="tablaPie"></tfoot>
+                </table>
+            </div>
+        </div>
         <div id="panel-dashboard" class="tab-panel">
             <div class="kpi-grid" id="kpiGrid"></div>
             <div class="charts">
@@ -323,14 +481,15 @@ function mostrarResultados(data) {
     `;
 
     resultContainer.innerHTML = html;
+    pintarCuerpoTabla();
     pintarDashboard(rows);
 }
 
-function kpi(label, valor, sub) {
+function kpi(label, valor, sub, columna) {
     return `
         <div class="kpi">
             <div class="kpi-label">${escapeHtml(label)}</div>
-            <div class="kpi-value">${escapeHtml(formatoNumero(valor))}</div>
+            <div class="kpi-value">${escapeHtml(formatoNumero(valor, columna))}</div>
             ${sub ? "<div class=\"kpi-sub\">" + escapeHtml(sub) + "</div>" : ""}
         </div>
     `;
@@ -348,10 +507,10 @@ function pintarDashboard(rows) {
     const pctMerma = compraQty ? (mermaQty / compraQty) * 100 : 0;
 
     document.getElementById("kpiGrid").innerHTML =
-        kpi("Compra", compraQty, "$ " + formatoNumero(compraImp)) +
-        kpi("Venta", ventaQty, "$ " + formatoNumero(ventaImp)) +
-        kpi("Merma", mermaQty, formatoNumero(pctMerma) + " % sobre compra") +
-        kpi("Inventario", existQty, "$ " + formatoNumero(invImp));
+        kpi("Compra", compraQty, formatoNumero(compraImp, "CostoTotalCompra"), "CantidadCompra") +
+        kpi("Venta", ventaQty, formatoNumero(ventaImp, "VentaTotal"), "CantidadVenta") +
+        kpi("Merma", mermaQty, formatoNumero(pctMerma) + " % sobre compra", "CantidadMerma") +
+        kpi("Inventario", existQty, formatoNumero(invImp, "ValorInventario"), "ExistenciaActual");
 
     const top = rows.slice().sort(function (a, b) {
         return (aNumero(b.VentaTotal) || 0) - (aNumero(a.VentaTotal) || 0);
@@ -455,14 +614,19 @@ function exportarExcel() {
     }
 
     try {
-        const worksheet = XLSX.utils.json_to_sheet(resultadosActuales);
+        const visibles = filasVisibles();
+        if (visibles.length === 0) {
+            alert("No hay datos para exportar.");
+            return;
+        }
+        const worksheet = XLSX.utils.json_to_sheet(visibles);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Tablero");
 
-        const columns = Object.keys(resultadosActuales[0]);
+        const columns = Object.keys(visibles[0]);
         worksheet["!cols"] = columns.map(function (column) {
             let maxLength = column.length;
-            resultadosActuales.forEach(function (row) {
+            visibles.forEach(function (row) {
                 let value = row[column];
                 if (value === null || value === undefined) {
                     value = "";

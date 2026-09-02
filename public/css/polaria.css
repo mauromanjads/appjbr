@@ -316,6 +316,43 @@ th {
     letter-spacing: 0.12em;
     text-transform: uppercase;
     font-weight: 600;
+    vertical-align: bottom;
+}
+
+.th-sort {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    margin: 0 0 8px;
+    padding: 0;
+    border: none !important;
+    background: transparent !important;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+    border-radius: 0 !important;
+}
+
+.th-sort:hover {
+    color: var(--accent);
+}
+
+.th-sort .sort-ind {
+    color: var(--accent);
+    font-size: 10px;
+    min-width: 10px;
+}
+
+th.num .th-sort {
+    justify-content: flex-end;
+}
+
+th.num .th-filter {
+    text-align: right;
 }
 
 td:first-child {
