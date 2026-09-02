@@ -485,12 +485,12 @@ function mostrarResultados(data) {
     pintarDashboard(rows);
 }
 
-function kpi(label, caption, valor, sub, columna) {
+function kpi(label, caption, valorTexto, sub) {
     return `
         <div class="kpi">
             <div class="kpi-label">${escapeHtml(label)}</div>
             <div class="kpi-caption">${escapeHtml(caption)}</div>
-            <div class="kpi-value">${escapeHtml(formatoNumero(valor, columna))}</div>
+            <div class="kpi-value">${escapeHtml(valorTexto)}</div>
             ${sub ? "<div class=\"kpi-sub\">" + escapeHtml(sub) + "</div>" : ""}
         </div>
     `;
@@ -508,10 +508,10 @@ function pintarDashboard(rows) {
     const pctMerma = compraQty ? (mermaQty / compraQty) * 100 : 0;
 
     document.getElementById("kpiGrid").innerHTML =
-        kpi("Compra", "Cantidad comprada", compraQty, "Costo total  " + formatoNumero(compraImp, "CostoTotalCompra"), "CantidadCompra") +
-        kpi("Venta", "Cantidad vendida", ventaQty, "Importe vendido  " + formatoNumero(ventaImp, "VentaTotal"), "CantidadVenta") +
-        kpi("Merma", "Cantidad de merma", mermaQty, formatoNumero(pctMerma) + " % de merma sobre compra", "CantidadMerma") +
-        kpi("Inventario", "Existencia actual", existQty, "Valor en inventario  " + formatoNumero(invImp, "ValorInventario"), "ExistenciaActual");
+        kpi("Compra", "Costo total", formatoNumero(compraImp, "CostoTotalCompra"), "Cantidad comprada  " + formatoNumero(compraQty, "CantidadCompra")) +
+        kpi("Venta", "Importe vendido", formatoNumero(ventaImp, "VentaTotal"), "Cantidad vendida  " + formatoNumero(ventaQty, "CantidadVenta")) +
+        kpi("Merma", "% de merma sobre compra", formatoNumero(pctMerma) + " %", "Cantidad de merma  " + formatoNumero(mermaQty, "CantidadMerma")) +
+        kpi("Inventario", "Valor en inventario", formatoNumero(invImp, "ValorInventario"), "Existencia actual  " + formatoNumero(existQty, "ExistenciaActual"));
 
     const top = rows.slice().sort(function (a, b) {
         return (aNumero(b.VentaTotal) || 0) - (aNumero(a.VentaTotal) || 0);

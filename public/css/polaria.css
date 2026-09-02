@@ -197,6 +197,16 @@ input[type="text"] {
     outline: none;
 }
 
+input[type="date"] {
+    color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 1;
+    filter: brightness(0) invert(1);
+}
+
 textarea {
     min-height: 180px;
     resize: vertical;
@@ -465,14 +475,14 @@ tfoot td {
     margin-top: 2px;
     font-size: 22px;
     font-weight: 700;
-    color: var(--text);
+    color: var(--accent);
     word-break: break-word;
 }
 
 .kpi-sub {
     margin-top: 4px;
     font-size: 12px;
-    color: var(--accent);
+    color: var(--text);
 }
 
 .charts {
