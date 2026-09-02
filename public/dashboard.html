@@ -6,6 +6,7 @@
     <title>Polaria · Tablero 1</title>
     <link rel="stylesheet" href="./css/polaria.css">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -55,11 +56,79 @@ document.getElementById("fechaHoy").textContent =
 const API_URL = "https://fleshed-jittery-swiftly.ngrok-free.dev/query";
 const SQL_URL = "./consultas/tablero-1-inventario.sql";
 
+const EXCLUIR_SUMA = /id|codigo|sku|nombre|unidad|producto/i;
+const RATIOS = {
+    CostoUnitario: ["CostoTotalCompra", "CantidadCompra"],
+    VentaUnitaria: ["VentaTotal", "CantidadVenta"],
+    MermaDesecho: ["CantidadMerma", "CantidadCompra"]
+};
+
 let resultadosActuales = [];
 let plantillaSql = null;
+let graficos = [];
 
 function esFechaIso(valor) {
     return /^\d{4}-\d{2}-\d{2}$/.test(valor);
+}
+
+function aNumero(valor) {
+    if (valor === null || valor === undefined || valor === "") {
+        return null;
+    }
+    if (typeof valor === "number") {
+        return Number.isFinite(valor) ? valor : null;
+    }
+    const n = Number(String(valor).replace(/,/g, ""));
+    return Number.isFinite(n) ? n : null;
+}
+
+function esColumnaNumerica(nombre, rows) {
+    if (EXCLUIR_SUMA.test(nombre)) {
+        return false;
+    }
+    let vistos = 0;
+    for (let i = 0; i < rows.length; i++) {
+        const n = aNumero(rows[i][nombre]);
+        if (n === null) {
+            continue;
+        }
+        vistos += 1;
+    }
+    return vistos > 0;
+}
+
+function sumaColumna(rows, nombre) {
+    return rows.reduce(function (acc, row) {
+        const n = aNumero(row[nombre]);
+        return acc + (n === null ? 0 : n);
+    }, 0);
+}
+
+function formatoNumero(valor) {
+    if (valor === null || valor === undefined || valor === "") {
+        return "";
+    }
+    const n = aNumero(valor);
+    if (n === null) {
+        return String(valor);
+    }
+    const dec = Math.abs(n) >= 100 ? 2 : 4;
+    return n.toLocaleString("es-MX", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: dec
+    });
+}
+
+function totalColumna(nombre, rows) {
+    if (RATIOS[nombre]) {
+        const num = sumaColumna(rows, RATIOS[nombre][0]);
+        const den = sumaColumna(rows, RATIOS[nombre][1]);
+        return den ? num / den : null;
+    }
+    if (!esColumnaNumerica(nombre, rows)) {
+        return null;
+    }
+    return sumaColumna(rows, nombre);
 }
 
 async function obtenerPlantilla() {
@@ -95,6 +164,7 @@ async function cargarTablero() {
 
     resultContainer.innerHTML = "";
     resultadosActuales = [];
+    destruirGraficos();
 
     if (!esFechaIso(fechaInicio) || !esFechaIso(fechaFin)) {
         status.className = "status error";
@@ -146,6 +216,15 @@ async function cargarTablero() {
     }
 }
 
+function mostrarPestana(nombre) {
+    document.querySelectorAll(".tab").forEach(function (btn) {
+        btn.classList.toggle("active", btn.getAttribute("data-tab") === nombre);
+    });
+    document.querySelectorAll(".tab-panel").forEach(function (panel) {
+        panel.classList.toggle("active", panel.id === "panel-" + nombre);
+    });
+}
+
 function mostrarResultados(data) {
 
     const resultContainer = document.getElementById("resultContainer");
@@ -164,6 +243,10 @@ function mostrarResultados(data) {
     }
 
     const columns = Object.keys(rows[0]);
+    const numericas = {};
+    columns.forEach(function (column) {
+        numericas[column] = esColumnaNumerica(column, rows) || !!RATIOS[column];
+    });
 
     let html = `
         <div class="result-header">
@@ -176,34 +259,192 @@ function mostrarResultados(data) {
                 <button class="export" onclick="exportarExcel()">Exportar Excel</button>
             </div>
         </div>
-        <div class="table-container">
-            <table>
-                <thead><tr>
+        <div class="tabs">
+            <button class="tab active" data-tab="tabla" onclick="mostrarPestana('tabla')">Tabla</button>
+            <button class="tab" data-tab="dashboard" onclick="mostrarPestana('dashboard')">Dashboard</button>
+        </div>
+        <div id="panel-tabla" class="tab-panel active">
+            <div class="table-container">
+                <table>
+                    <thead><tr>
     `;
 
-    columns.forEach((column) => {
-        html += "<th>" + escapeHtml(column) + "</th>";
+    columns.forEach(function (column) {
+        html += "<th class=\"" + (numericas[column] ? "num" : "") + "\">" +
+            escapeHtml(column) + "</th>";
     });
 
     html += "</tr></thead><tbody>";
 
-    rows.forEach((row) => {
+    rows.forEach(function (row) {
         html += "<tr>";
-        columns.forEach((column) => {
-            let value = row[column];
-            if (value === null || value === undefined) {
-                value = "";
-            }
-            if (typeof value === "object") {
-                value = JSON.stringify(value);
-            }
-            html += "<td>" + escapeHtml(String(value)) + "</td>";
+        columns.forEach(function (column) {
+            const raw = row[column];
+            const texto = numericas[column] ? formatoNumero(raw) : (
+                raw === null || raw === undefined ? "" :
+                typeof raw === "object" ? JSON.stringify(raw) : String(raw)
+            );
+            html += "<td class=\"" + (numericas[column] ? "num" : "") + "\">" +
+                escapeHtml(texto) + "</td>";
         });
         html += "</tr>";
     });
 
-    html += "</tbody></table></div>";
+    html += "</tbody><tfoot><tr>";
+    columns.forEach(function (column, i) {
+        if (i === 0) {
+            html += "<td>Total</td>";
+            return;
+        }
+        const total = totalColumna(column, rows);
+        html += "<td class=\"" + (numericas[column] ? "num" : "") + "\">" +
+            (total === null ? "" : escapeHtml(formatoNumero(total))) + "</td>";
+    });
+    html += "</tr></tfoot></table></div></div>";
+
+    html += `
+        <div id="panel-dashboard" class="tab-panel">
+            <div class="kpi-grid" id="kpiGrid"></div>
+            <div class="charts">
+                <div class="chart-card">
+                    <h3>Top productos por venta</h3>
+                    <div class="chart-wrap"><canvas id="chartVentas"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Composición de importe</h3>
+                    <div class="chart-wrap"><canvas id="chartMix"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <h3>Compra vs venta vs merma (unidades)</h3>
+                    <div class="chart-wrap"><canvas id="chartUnidades"></canvas></div>
+                </div>
+            </div>
+        </div>
+    `;
+
     resultContainer.innerHTML = html;
+    pintarDashboard(rows);
+}
+
+function kpi(label, valor, sub) {
+    return `
+        <div class="kpi">
+            <div class="kpi-label">${escapeHtml(label)}</div>
+            <div class="kpi-value">${escapeHtml(formatoNumero(valor))}</div>
+            ${sub ? "<div class=\"kpi-sub\">" + escapeHtml(sub) + "</div>" : ""}
+        </div>
+    `;
+}
+
+function pintarDashboard(rows) {
+    const compraQty = sumaColumna(rows, "CantidadCompra");
+    const ventaQty = sumaColumna(rows, "CantidadVenta");
+    const mermaQty = sumaColumna(rows, "CantidadMerma");
+    const existQty = sumaColumna(rows, "ExistenciaActual");
+    const compraImp = sumaColumna(rows, "CostoTotalCompra");
+    const ventaImp = sumaColumna(rows, "VentaTotal");
+    const mermaImp = sumaColumna(rows, "CostoTotalMerma");
+    const invImp = sumaColumna(rows, "ValorInventario");
+    const pctMerma = compraQty ? (mermaQty / compraQty) * 100 : 0;
+
+    document.getElementById("kpiGrid").innerHTML =
+        kpi("Compra", compraQty, "$ " + formatoNumero(compraImp)) +
+        kpi("Venta", ventaQty, "$ " + formatoNumero(ventaImp)) +
+        kpi("Merma", mermaQty, formatoNumero(pctMerma) + " % sobre compra") +
+        kpi("Inventario", existQty, "$ " + formatoNumero(invImp));
+
+    const top = rows.slice().sort(function (a, b) {
+        return (aNumero(b.VentaTotal) || 0) - (aNumero(a.VentaTotal) || 0);
+    }).slice(0, 8);
+
+    const labels = top.map(function (r) {
+        const n = String(r.NombreProducto || r.CodigoProducto || "");
+        return n.length > 22 ? n.slice(0, 21) + "…" : n;
+    });
+
+    const grid = "rgba(90, 200, 160, 0.12)";
+    const ticks = { color: "#8aa89c" };
+
+    destruirGraficos();
+
+    graficos.push(new Chart(document.getElementById("chartVentas"), {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "Venta total",
+                data: top.map(function (r) { return aNumero(r.VentaTotal) || 0; }),
+                backgroundColor: "rgba(46, 230, 168, 0.75)"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: ticks, grid: { color: grid } },
+                y: { ticks: ticks, grid: { color: grid } }
+            }
+        }
+    }));
+
+    graficos.push(new Chart(document.getElementById("chartMix"), {
+        type: "doughnut",
+        data: {
+            labels: ["Costo compra", "Venta", "Costo merma", "Inventario"],
+            datasets: [{
+                data: [compraImp, ventaImp, mermaImp, invImp],
+                backgroundColor: ["#2ee6a8", "#7ad7ff", "#e6d08a", "#8aa89c"]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: "#f4fffb" } }
+            }
+        }
+    }));
+
+    graficos.push(new Chart(document.getElementById("chartUnidades"), {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: "Compra",
+                    data: top.map(function (r) { return aNumero(r.CantidadCompra) || 0; }),
+                    backgroundColor: "rgba(122, 215, 255, 0.8)"
+                },
+                {
+                    label: "Venta",
+                    data: top.map(function (r) { return aNumero(r.CantidadVenta) || 0; }),
+                    backgroundColor: "rgba(46, 230, 168, 0.8)"
+                },
+                {
+                    label: "Merma",
+                    data: top.map(function (r) { return aNumero(r.CantidadMerma) || 0; }),
+                    backgroundColor: "rgba(230, 208, 138, 0.85)"
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: "#f4fffb" } } },
+            scales: {
+                x: { ticks: ticks, grid: { color: grid } },
+                y: { stacked: false, ticks: ticks, grid: { color: grid } }
+            }
+        }
+    }));
+}
+
+function destruirGraficos() {
+    graficos.forEach(function (g) {
+        g.destroy();
+    });
+    graficos = [];
 }
 
 function exportarExcel() {
@@ -219,9 +460,9 @@ function exportarExcel() {
         XLSX.utils.book_append_sheet(workbook, worksheet, "Tablero");
 
         const columns = Object.keys(resultadosActuales[0]);
-        worksheet["!cols"] = columns.map((column) => {
+        worksheet["!cols"] = columns.map(function (column) {
             let maxLength = column.length;
-            resultadosActuales.forEach((row) => {
+            resultadosActuales.forEach(function (row) {
                 let value = row[column];
                 if (value === null || value === undefined) {
                     value = "";
