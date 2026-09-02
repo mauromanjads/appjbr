@@ -18,7 +18,7 @@ app.post("/api/conectar", async (_req, res) => {
   if (!url || !key) {
     return res.status(500).json({
       ok: false,
-      error: "Faltan credenciales en config.js (url / key)"
+      error: "Faltan SUPABASE_URL o SUPABASE_KEY en las variables de entorno"
     });
   }
 
@@ -32,7 +32,7 @@ app.post("/api/conectar", async (_req, res) => {
     if (response.status === 401 || response.status === 403) {
       return res.status(401).json({
         ok: false,
-        error: "La clave fue rechazada. Revisa config.js."
+        error: "La clave fue rechazada. Revisa SUPABASE_KEY."
       });
     }
 
@@ -175,7 +175,11 @@ app.use("/api", (_req, res) => {
   });
 });
 
-app.listen(config.port, () => {
-  console.log("Servidor en http://localhost:" + config.port);
-  console.log("Migración: http://localhost:" + config.port + "/migracion.html");
-});
+if (!process.env.VERCEL) {
+  app.listen(config.port, () => {
+    console.log("Servidor en http://localhost:" + config.port);
+    console.log("Migración: http://localhost:" + config.port + "/migracion.html");
+  });
+}
+
+module.exports = app;
