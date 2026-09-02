@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Polaria · SQL Explorer</title>
+    <title>Polaria · Tablero 1</title>
     <link rel="stylesheet" href="./css/polaria.css">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
@@ -13,31 +13,32 @@
     <span class="topbar-date" id="fechaHoy"></span>
     <a class="brand" href="./index.html"><span>✦</span> polaria</a>
     <nav class="topbar-nav">
-        <a class="active" href="./index.html">Explorer</a>
-        <a href="./dashboard.html">Tablero</a>
+        <a href="./index.html">Explorer</a>
+        <a class="active" href="./dashboard.html">Tablero</a>
         <a href="./migracion.html">Migración</a>
     </nav>
 </header>
 
 <div class="page">
-    <div class="crumb">Inicio / <b>Explorer</b></div>
-    <h1>SQL Explorer</h1>
-    <p class="subtitle">Consulta de información SQL Server · solo lectura</p>
+    <div class="crumb">Inicio / <b>Tablero 1</b></div>
+    <h1>Compras, ventas e inventario</h1>
+    <p class="subtitle">SQL Server · rango de fechas sobre movimientos · inventario actual almacén 8</p>
 
     <div class="container">
-        <div id="status" class="status waiting">⚪ Esperando consulta...</div>
+        <div id="status" class="status waiting">Elige el rango de fechas y carga el tablero</div>
 
-        <div class="editor">
-            <textarea id="sqlQuery">SELECT name FROM sys.databases</textarea>
-
-            <div class="actions">
-                <button class="execute" onclick="ejecutarConsulta()">Ejecutar</button>
-                <button class="clear" onclick="limpiarConsulta()">Limpiar</button>
-                <span class="info">Solo se permiten consultas SELECT</span>
+        <div class="filtros">
+            <div class="campo">
+                <label for="fechaInicio">Fecha inicio</label>
+                <input id="fechaInicio" type="date" value="2026-07-01">
             </div>
-
-            <div class="warning">
-                Esta herramienta está configurada para consultas de solo lectura.
+            <div class="campo">
+                <label for="fechaFin">Fecha fin</label>
+                <input id="fechaFin" type="date" value="2026-09-01">
+            </div>
+            <div class="actions">
+                <button id="btnCargar" class="execute" onclick="cargarTablero()">Cargar tablero</button>
+                <span class="info">Consulta: consultas/tablero-1-inventario.sql</span>
             </div>
         </div>
 
@@ -52,26 +53,69 @@ document.getElementById("fechaHoy").textContent =
     "Fecha " + new Date().toLocaleDateString("es-MX");
 
 const API_URL = "https://fleshed-jittery-swiftly.ngrok-free.dev/query";
+const SQL_URL = "./consultas/tablero-1-inventario.sql";
 
 let resultadosActuales = [];
+let plantillaSql = null;
 
-async function ejecutarConsulta() {
+function esFechaIso(valor) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(valor);
+}
+
+async function obtenerPlantilla() {
+    if (plantillaSql) {
+        return plantillaSql;
+    }
+
+    const response = await fetch(SQL_URL, {
+        headers: { "ngrok-skip-browser-warning": "true" }
+    });
+
+    if (!response.ok) {
+        throw new Error("No se pudo leer consultas/tablero-1-inventario.sql");
+    }
+
+    plantillaSql = await response.text();
+    return plantillaSql;
+}
+
+function armarConsulta(plantilla, fechaInicio, fechaFin) {
+    return plantilla
+        .split("__FECHA_INICIO__").join(fechaInicio)
+        .split("__FECHA_FIN__").join(fechaFin);
+}
+
+async function cargarTablero() {
 
     const status = document.getElementById("status");
     const resultContainer = document.getElementById("resultContainer");
-    const query = document.getElementById("sqlQuery").value.trim();
+    const boton = document.getElementById("btnCargar");
+    const fechaInicio = document.getElementById("fechaInicio").value;
+    const fechaFin = document.getElementById("fechaFin").value;
 
-    if (!query) {
+    resultContainer.innerHTML = "";
+    resultadosActuales = [];
+
+    if (!esFechaIso(fechaInicio) || !esFechaIso(fechaFin)) {
         status.className = "status error";
-        status.innerHTML = "Escribe una consulta SQL";
+        status.textContent = "Indica fecha inicio y fecha fin";
         return;
     }
 
+    if (fechaInicio > fechaFin) {
+        status.className = "status error";
+        status.textContent = "La fecha inicio no puede ser mayor que la fecha fin";
+        return;
+    }
+
+    boton.disabled = true;
     status.className = "status waiting";
-    status.innerHTML = "Ejecutando consulta...";
-    resultContainer.innerHTML = "";
+    status.textContent = "Cargando tablero " + fechaInicio + " a " + fechaFin + "...";
 
     try {
+        const plantilla = await obtenerPlantilla();
+        const query = armarConsulta(plantilla, fechaInicio, fechaFin);
+
         const response = await fetch(API_URL, {
             method: "POST",
             headers: {
@@ -88,15 +132,17 @@ async function ejecutarConsulta() {
         }
 
         status.className = "status success";
-        status.innerHTML = "Consulta ejecutada correctamente";
+        status.textContent = "Tablero " + fechaInicio + " a " + fechaFin;
         mostrarResultados(data);
 
     } catch (error) {
         status.className = "status error";
-        status.innerHTML = "Error";
+        status.textContent = "Error";
         resultContainer.innerHTML = `
             <div class="warning">${escapeHtml(error.message)}</div>
         `;
+    } finally {
+        boton.disabled = false;
     }
 }
 
@@ -131,7 +177,7 @@ function mostrarResultados(data) {
             </div>
         </div>
         <div class="table-container">
-            <table id="resultTable">
+            <table>
                 <thead><tr>
     `;
 
@@ -170,7 +216,7 @@ function exportarExcel() {
     try {
         const worksheet = XLSX.utils.json_to_sheet(resultadosActuales);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Resultado");
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Tablero");
 
         const columns = Object.keys(resultadosActuales[0]);
         worksheet["!cols"] = columns.map((column) => {
@@ -193,22 +239,14 @@ function exportarExcel() {
 
         worksheet["!autofilter"] = { ref: worksheet["!ref"] };
 
-        const fecha = new Date().toISOString().slice(0, 10);
-        XLSX.writeFile(workbook, "resultado_sql_" + fecha + ".xlsx");
+        const inicio = document.getElementById("fechaInicio").value;
+        const fin = document.getElementById("fechaFin").value;
+        XLSX.writeFile(workbook, "tablero_1_" + inicio + "_" + fin + ".xlsx");
 
     } catch (error) {
         console.error(error);
         alert("No fue posible generar el archivo Excel.");
     }
-}
-
-function limpiarConsulta() {
-    document.getElementById("sqlQuery").value = "";
-    document.getElementById("resultContainer").innerHTML = "";
-    resultadosActuales = [];
-    const status = document.getElementById("status");
-    status.className = "status waiting";
-    status.innerHTML = "Esperando consulta...";
 }
 
 function escapeHtml(value) {

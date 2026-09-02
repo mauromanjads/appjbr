@@ -1,0 +1,115 @@
+SELECT 
+    ISNULL(C.CIDPRODUCTO, ISNULL(V.CIDPRODUCTO, ISNULL(M.CIDPRODUCTO,I.CIDPRODUCTO))) AS IdProducto,
+    ISNULL(C.CCODIGOPRODUCTO, ISNULL(V.CCODIGOPRODUCTO, ISNULL(M.CCODIGOPRODUCTO,I.CCODIGOPRODUCTO))) AS CodigoProducto,
+    ISNULL(C.CNOMBREPRODUCTO, ISNULL(V.CNOMBREPRODUCTO, ISNULL(M.CNOMBREPRODUCTO,I.CNOMBREPRODUCTO))) AS NombreProducto,
+	Unidades1.CABREVIATURA AS Unidad,
+
+    ISNULL(C.TotalUnidadesCompradas, 0) AS CantidadCompra,
+	ISNULL(V.TotalUnidadesFacturadas, 0) AS CantidadVenta,
+    ISNULL(M.TotalUnidadesMerma, 0) AS CantidadMerma,
+	ISNULL(I.ExistenciaActual,0) AS ExistenciaActual,
+    
+	ISNULL(C.CostoTotal, 0) AS CostoTotalCompra,
+	ISNULL(V.VentaTotal, 0) AS VentaTotal,
+	ISNULL(M.CostoTotalMerma, 0) AS CostoTotalMerma,
+	ISNULL(I.ValorTotalCosto,0) AS ValorInventario,
+
+	ISNULL(C.CostoTotal, 0) / NULLIF(ISNULL(C.TotalUnidadesCompradas, 0), 0) AS CostoUnitario,
+	ISNULL(V.VentaTotal, 0)  / NULLIF(ISNULL(V.TotalUnidadesFacturadas, 0), 0) AS VentaUnitaria,
+	ISNULL(M.TotalUnidadesMerma, 0) / NULLIF(ISNULL(C.TotalUnidadesCompradas, 0), 0) AS MermaDesecho
+
+FROM (
+    SELECT 
+        P.CIDPRODUCTO,
+        P.CCODIGOPRODUCTO,
+        P.CNOMBREPRODUCTO,
+        SUM(M.CUNIDADES) AS TotalUnidadesCompradas,
+		SUM(M.CNETO) AS CostoNeto,
+		SUM(M.CTOTAL) AS CostoTotal,
+		SUM(
+		    isnull(M.CDESCUENTO1,0) + isnull(M.CDESCUENTO2,0) +  isnull(M.CDESCUENTO3,0)  + isnull(M.CDESCUENTO4,0) + isnull(M.CDESCUENTO5,0)
+		) AS DescuentoCompra,
+		SUM(
+			isnull(M.CIMPUESTO1,0) + isnull(M.CIMPUESTO2,0) +  isnull(M.CIMPUESTO3,0)
+		) AS Impuestos
+    FROM admProductos AS P
+    INNER JOIN admMovimientos AS M ON M.CIDPRODUCTO = P.CIDPRODUCTO AND M.CMOVTOOCULTO = 0
+        AND M.CIDDOCUMENTODE IN (19)
+        AND M.CFECHA BETWEEN '__FECHA_INICIO__' AND '__FECHA_FIN__'
+    INNER JOIN admDocumentos AS D ON D.CIDDOCUMENTO = M.CIDDOCUMENTO AND D.CCANCELADO = 0
+    INNER JOIN admClientes AS CTE ON CTE.CIDCLIENTEPROVEEDOR = D.CIDCLIENTEPROVEEDOR 
+	GROUP BY P.CIDPRODUCTO, P.CCODIGOPRODUCTO, P.CNOMBREPRODUCTO
+) C
+FULL OUTER JOIN (
+    SELECT 
+        P.CIDPRODUCTO,
+        P.CCODIGOPRODUCTO,
+        P.CNOMBREPRODUCTO,
+		SUM(M.CUNIDADES) AS TotalUnidadesFacturadas,
+		SUM(M.CNETO) AS VentaNeta,
+		SUM(M.CTOTAL) AS VentaTotal,
+		SUM(
+			isnull(M.CDESCUENTO1,0) + isnull(M.CDESCUENTO2,0) +  isnull(M.CDESCUENTO3,0)  + isnull(M.CDESCUENTO4,0) + isnull(M.CDESCUENTO5,0)
+		) AS DescuentoVenta,
+		SUM(
+			isnull(M.CIMPUESTO1,0) + isnull(M.CIMPUESTO2,0) +  isnull(M.CIMPUESTO3,0)
+		) AS ImpuestosVenta
+    FROM admProductos AS P 
+    INNER JOIN admMovimientos AS M ON M.CIDPRODUCTO = P.CIDPRODUCTO 
+		AND M.CIDDOCUMENTODE IN (4)
+		AND M.CFECHA BETWEEN '__FECHA_INICIO__' AND '__FECHA_FIN__'
+    LEFT JOIN admMovimientos AS MD ON MD.CIDMOVIMIENTO = M.CIDMOVTOOWNER 
+    INNER JOIN admDocumentos AS D ON D.CIDDOCUMENTO = (CASE M.CMOVTOOCULTO WHEN 0 THEN M.CIDDOCUMENTO ELSE MD.CIDDOCUMENTO END) AND D.CCANCELADO = 0 
+    LEFT JOIN admConceptos AS CPTO ON CPTO.CIDCONCEPTODOCUMENTO = D.CIDCONCEPTODOCUMENTO 
+    INNER JOIN admClientes AS CTE ON CTE.CIDCLIENTEPROVEEDOR = D.CIDCLIENTEPROVEEDOR 
+    GROUP BY P.CIDPRODUCTO, P.CCODIGOPRODUCTO, P.CNOMBREPRODUCTO
+) V ON C.CIDPRODUCTO = V.CIDPRODUCTO
+FULL OUTER JOIN (
+    SELECT 
+        P.CIDPRODUCTO, 
+		P.CCODIGOPRODUCTO, 
+		P.CNOMBREPRODUCTO, 
+		SUM(M.CUNIDADES) AS TotalUnidadesMerma,
+		SUM(M.CNETO) AS CostoNetoMerma,
+		SUM(M.CTOTAL) AS CostoTotalMerma,
+		SUM(
+			isnull(M.CDESCUENTO1,0) + isnull(M.CDESCUENTO2,0) +  isnull(M.CDESCUENTO3,0)  + isnull(M.CDESCUENTO4,0) + isnull(M.CDESCUENTO5,0)
+		) AS DescuentoMerma,
+		SUM(
+			isnull(M.CIMPUESTO1,0) + isnull(M.CIMPUESTO2,0) +  isnull(M.CIMPUESTO3,0)
+		) AS ImpuestosMerma
+    FROM admMovimientos M
+    INNER JOIN admProductos P ON P.cIdProducto = M.cIdProducto
+    INNER JOIN admDocumentos D ON D.cIdDocumento = M.cIdDocumento
+	INNER JOIN admConceptos CPTO ON CPTO.cIdConceptoDocumento = D.cIdConceptoDocumento
+	LEFT JOIN admDocumentosModelo AS DM ON DM.CIDDOCUMENTODE = D.CIDDOCUMENTODE 
+    WHERE CPTO.CIDCONCEPTODOCUMENTO IN (3010, 3020)
+      AND M.CFECHA BETWEEN '__FECHA_INICIO__' AND '__FECHA_FIN__'
+    GROUP BY P.CIDPRODUCTO, P.CCODIGOPRODUCTO, P.CNOMBREPRODUCTO
+) M ON ISNULL(C.CIDPRODUCTO, V.CIDPRODUCTO) = M.CIDPRODUCTO
+FULL OUTER JOIN (
+	SELECT 
+		P.CIDPRODUCTO, 
+		P.CCODIGOPRODUCTO, 
+		P.CNOMBREPRODUCTO,
+		ISNULL(SUM(cp.cExistencia), 0) AS ExistenciaActual,
+		ISNULL(SUM(cp.cCosto), 0) AS ValorTotalCosto,
+		A.cCodigoAlmacen,
+		A.cNombreAlmacen
+	FROM admProductos P
+		INNER JOIN     admCapasProducto cp ON P.cIdProducto = cp.cIdProducto
+		INNER JOIN     admAlmacenes A ON cp.cIdAlmacen = A.cIdAlmacen
+	WHERE     A.cCodigoAlmacen IN ('8')
+	GROUP BY 
+		P.CIDPRODUCTO,
+		P.cCodigoProducto,
+		P.cNombreProducto,
+		A.cCodigoAlmacen,
+		A.cNombreAlmacen
+	HAVING 
+		SUM(cp.cExistencia) <> 0
+) I ON ISNULL(C.CIDPRODUCTO, ISNULL(V.CIDPRODUCTO, M.CIDPRODUCTO)) = I.CIDPRODUCTO
+LEFT JOIN admProductos P ON ISNULL(C.CCODIGOPRODUCTO, ISNULL(V.CCODIGOPRODUCTO, ISNULL(M.CCODIGOPRODUCTO, I.CIDPRODUCTO))) = P.CCODIGOPRODUCTO
+LEFT JOIN admUnidadesMedidaPeso Unidades1 ON P.CIDUNIDADBASE = Unidades1.cIdUnidad 
+WHERE TRY_CAST(p.cCodigoProducto AS BIGINT) < 601000024
+ORDER BY CodigoProducto ASC
