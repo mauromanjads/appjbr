@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polaria · Migración</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f6f8;
+        margin: 0;
+        padding: 40px;
+    }
+
+    .container {
+        max-width: 900px;
+        margin: auto;
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+        margin-top: 0;
+        margin-bottom: 8px;
+    }
+
+    .subtitle {
+        color: #666;
+        margin-top: 0;
+    }
+
+    .status {
+        margin: 20px 0;
+        padding: 15px;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+
+    .waiting {
+        background: #eee;
+        color: #555;
+    }
+
+    .success {
+        background: #dff5e1;
+        color: #176b2c;
+    }
+
+    .error {
+        background: #f8d7da;
+        color: #842029;
+    }
+
+    .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    button {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        background: #222;
+        color: white;
+    }
+
+    button:hover {
+        background: #444;
+    }
+
+    button:disabled {
+        background: #999;
+        cursor: default;
+    }
+
+    .warning {
+        margin-top: 16px;
+        padding: 12px;
+        background: #fff3cd;
+        color: #664d03;
+        border-radius: 8px;
+        font-size: 14px;
+    }
+
+    code {
+        font-family: Consolas, monospace;
+        font-size: 13px;
+        background: #f1f3f5;
+        padding: 1px 5px;
+        border-radius: 4px;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Migración</h1>
+    <p class="subtitle">
+        SQL Server → Supabase · esquema <code>emp_jbr_cygnus_y9ihz</code>
+    </p>
+
+    <div id="status" class="status waiting">
+        ⚪ Sin conectar
+    </div>
+
+    <div class="actions">
+        <button id="btnConectar" onclick="conectar()">
+            Conectar
+        </button>
+        <button id="btnProductos" onclick="migrarProductos()">
+            Migrar productos
+        </button>
+        <button id="btnClientes" onclick="migrarClientes()">
+            Migrar clientes
+        </button>
+        <button id="btnBodegas" onclick="migrarBodegas()">
+            Migrar bodegas
+        </button>
+    </div>
+
+    <div id="detalle"></div>
+
+</div>
+
+<script>
+
+async function leerJson(response) {
+    const texto = await response.text();
+    try {
+        return JSON.parse(texto);
+    } catch (_error) {
+        throw new Error(
+            "El servidor no respondió JSON. Abre la página en http://localhost:3000/migracion.html y reinicia con npm start."
+        );
+    }
+}
+
+
+async function conectar() {
+
+    const status = document.getElementById("status");
+    const detalle = document.getElementById("detalle");
+    const boton = document.getElementById("btnConectar");
+
+    detalle.innerHTML = "";
+    boton.disabled = true;
+    status.className = "status waiting";
+    status.textContent = "🟡 Conectando...";
+
+    try {
+
+        const response = await fetch("/api/conectar", {
+            method: "POST"
+        });
+
+        const data = await leerJson(response);
+
+        if (!response.ok || !data.ok) {
+            throw new Error(data.error || "Error de conexión");
+        }
+
+        status.className = "status success";
+        status.textContent = "🟢 Conectado a " + data.schema;
+
+    } catch (error) {
+
+        status.className = "status error";
+        status.textContent = "🔴 No se pudo conectar";
+
+        detalle.innerHTML = `
+            <div class="warning">
+                ${escapeHtml(error.message)}
+            </div>
+        `;
+
+    } finally {
+        boton.disabled = false;
+    }
+
+}
+
+
+async function migrarProductos() {
+
+    const status = document.getElementById("status");
+    const detalle = document.getElementById("detalle");
+    const boton = document.getElementById("btnProductos");
+
+    detalle.innerHTML = "";
+    boton.disabled = true;
+    status.className = "status waiting";
+    status.textContent = "🟡 Migrando productos...";
+
+    try {
+
+        const response = await fetch("/api/migrar/productos", {
+            method: "POST"
+        });
+
+        const data = await leerJson(response);
+
+        if (!response.ok || !data.ok) {
+            throw new Error(data.error || "Error migrando productos");
+        }
+
+        status.className = "status success";
+        status.textContent = "🟢 " + data.total + " productos en " + data.codigo_cuenta;
+
+        if (data.omitidos) {
+            detalle.innerHTML = `
+                <div class="warning">
+                    ${data.omitidos} fila(s) omitida(s)
+                </div>
+            `;
+        }
+
+    } catch (error) {
+
+        status.className = "status error";
+        status.textContent = "🔴 No se pudieron migrar los productos";
+
+        detalle.innerHTML = `
+            <div class="warning">
+                ${escapeHtml(error.message)}
+            </div>
+        `;
+
+    } finally {
+        boton.disabled = false;
+    }
+
+}
+
+
+async function migrarClientes() {
+
+    const status = document.getElementById("status");
+    const detalle = document.getElementById("detalle");
+    const boton = document.getElementById("btnClientes");
+
+    detalle.innerHTML = "";
+    boton.disabled = true;
+    status.className = "status waiting";
+    status.textContent = "🟡 Migrando clientes...";
+
+    try {
+
+        const response = await fetch("/api/migrar/clientes", {
+            method: "POST"
+        });
+
+        const data = await leerJson(response);
+
+        if (!response.ok || !data.ok) {
+            throw new Error(data.error || "Error migrando clientes");
+        }
+
+        status.className = "status success";
+        status.textContent = "🟢 " + data.total + " clientes en " + data.codigo_cuenta;
+
+        if (data.omitidos) {
+            detalle.innerHTML = `
+                <div class="warning">
+                    ${data.omitidos} fila(s) omitida(s)
+                </div>
+            `;
+        }
+
+    } catch (error) {
+
+        status.className = "status error";
+        status.textContent = "🔴 No se pudieron migrar los clientes";
+
+        detalle.innerHTML = `
+            <div class="warning">
+                ${escapeHtml(error.message)}
+            </div>
+        `;
+
+    } finally {
+        boton.disabled = false;
+    }
+
+}
+
+
+async function migrarBodegas() {
+
+    const status = document.getElementById("status");
+    const detalle = document.getElementById("detalle");
+    const boton = document.getElementById("btnBodegas");
+
+    detalle.innerHTML = "";
+    boton.disabled = true;
+    status.className = "status waiting";
+    status.textContent = "🟡 Migrando bodegas...";
+
+    try {
+
+        const response = await fetch("/api/migrar/bodegas", {
+            method: "POST"
+        });
+
+        const data = await leerJson(response);
+
+        if (!response.ok || !data.ok) {
+            throw new Error(data.error || "Error migrando bodegas");
+        }
+
+        status.className = "status success";
+        status.textContent = "🟢 " + data.total + " bodegas en " + data.codigo_cuenta;
+
+        if (data.omitidos) {
+            detalle.innerHTML = `
+                <div class="warning">
+                    ${data.omitidos} fila(s) omitida(s)
+                </div>
+            `;
+        }
+
+    } catch (error) {
+
+        status.className = "status error";
+        status.textContent = "🔴 No se pudieron migrar las bodegas";
+
+        detalle.innerHTML = `
+            <div class="warning">
+                ${escapeHtml(error.message)}
+            </div>
+        `;
+
+    } finally {
+        boton.disabled = false;
+    }
+
+}
+
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+</script>
+
+</body>
+</html>

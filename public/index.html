@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polaria SQL Explorer</title>
+
+```
+<!-- Librería SheetJS para generar archivos Excel -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f6f8;
+        margin: 0;
+        padding: 40px;
+    }
+
+    .container {
+        max-width: 1200px;
+        margin: auto;
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+        margin-top: 0;
+        margin-bottom: 8px;
+    }
+
+    .subtitle {
+        color: #666;
+        margin-top: 0;
+    }
+
+    .status {
+        margin: 20px 0;
+        padding: 15px;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+
+    .waiting {
+        background: #eee;
+        color: #555;
+    }
+
+    .success {
+        background: #dff5e1;
+        color: #176b2c;
+    }
+
+    .error {
+        background: #f8d7da;
+        color: #842029;
+    }
+
+    .editor {
+        margin-top: 25px;
+    }
+
+    textarea {
+        width: 100%;
+        min-height: 180px;
+        resize: vertical;
+        padding: 15px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        font-family: Consolas, monospace;
+        font-size: 15px;
+        line-height: 1.5;
+        outline: none;
+    }
+
+    textarea:focus {
+        border-color: #666;
+    }
+
+    .actions {
+        margin-top: 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    button {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    .execute {
+        background: #222;
+        color: white;
+    }
+
+    .execute:hover {
+        background: #444;
+    }
+
+    .clear {
+        background: #eee;
+        color: #333;
+    }
+
+    .clear:hover {
+        background: #ddd;
+    }
+
+    .info {
+        color: #666;
+        font-size: 14px;
+    }
+
+    .result-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 30px;
+    }
+
+    .result-header h2 {
+        margin: 0;
+    }
+
+    .result-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .row-count {
+        color: #666;
+        font-size: 14px;
+    }
+
+    .export {
+        background: #198754;
+        color: white;
+        font-size: 14px;
+        padding: 9px 15px;
+    }
+
+    .export:hover {
+        background: #157347;
+    }
+
+    .table-container {
+        width: 100%;
+        max-height: 500px;
+        overflow-x: auto;
+        overflow-y: auto;
+        margin-top: 15px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+    }
+
+    table {
+        width: max-content;
+        min-width: 100%;
+        border-collapse: collapse;
+    }
+
+    th,
+    td {
+        border-bottom: 1px solid #ddd;
+        padding: 10px 12px;
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    th {
+        background: #f1f3f5;
+        font-weight: bold;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    tr:last-child td {
+        border-bottom: none;
+    }
+
+    .empty {
+        padding: 25px;
+        text-align: center;
+        color: #777;
+    }
+
+    .warning {
+        margin-top: 15px;
+        padding: 12px;
+        background: #fff3cd;
+        color: #664d03;
+        border-radius: 8px;
+        font-size: 14px;
+    }
+</style>
+```
+
+</head>
+
+<body>
+
+<div class="container">
+
+```
+<h1>Polaria SQL Explorer</h1>
+
+<p class="subtitle">
+    Consulta de información SQL Server · Solo lectura
+</p>
+
+<div id="status" class="status waiting">
+    ⚪ Esperando consulta...
+</div>
+
+<div class="editor">
+
+    <textarea id="sqlQuery">SELECT name FROM sys.databases</textarea>
+
+    <div class="actions">
+
+        <button class="execute" onclick="ejecutarConsulta()">
+            ▶ Ejecutar
+        </button>
+
+        <button class="clear" onclick="limpiarConsulta()">
+            Limpiar
+        </button>
+
+        <span class="info">
+            Solo se permiten consultas SELECT
+        </span>
+
+    </div>
+
+    <div class="warning">
+        ⚠️ Esta herramienta está configurada para consultas de solo lectura.
+    </div>
+
+</div>
+
+<div id="resultContainer"></div>
+```
+
+</div>
+
+<script>
+
+const API_URL = "https://fleshed-jittery-swiftly.ngrok-free.dev/query";
+
+// Guardamos los resultados actuales
+let resultadosActuales = [];
+
+
+/* =========================================================
+   EJECUTAR CONSULTA
+========================================================= */
+
+async function ejecutarConsulta() {
+
+    const status = document.getElementById("status");
+    const resultContainer = document.getElementById("resultContainer");
+
+    const query = document.getElementById("sqlQuery").value.trim();
+
+    if (!query) {
+
+        status.className = "status error";
+        status.innerHTML = "🔴 Escribe una consulta SQL";
+
+        return;
+    }
+
+    status.className = "status waiting";
+    status.innerHTML = "🟡 Ejecutando consulta...";
+
+    resultContainer.innerHTML = "";
+
+    try {
+
+        const response = await fetch(API_URL, {
+
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json",
+                "ngrok-skip-browser-warning": "true"
+            },
+
+            body: JSON.stringify({
+                query: query
+            })
+
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+
+            throw new Error(
+                data.error || "Error ejecutando la consulta"
+            );
+
+        }
+
+        status.className = "status success";
+        status.innerHTML = "🟢 Consulta ejecutada correctamente";
+
+        mostrarResultados(data);
+
+    } catch (error) {
+
+        status.className = "status error";
+        status.innerHTML = "🔴 Error";
+
+        resultContainer.innerHTML = `
+            <div class="warning">
+                ${escapeHtml(error.message)}
+            </div>
+        `;
+
+    }
+}
+
+
+/* =========================================================
+   MOSTRAR RESULTADOS
+========================================================= */
+
+function mostrarResultados(data) {
+
+    const resultContainer = document.getElementById("resultContainer");
+
+    const rows = data.rows || [];
+
+    // Guardar resultados para exportación
+    resultadosActuales = rows;
+
+    if (rows.length === 0) {
+
+        resultContainer.innerHTML = `
+
+            <div class="result-header">
+
+                <h2>Resultado</h2>
+
+                <span class="row-count">
+                    0 registros
+                </span>
+
+            </div>
+
+            <div class="empty">
+                La consulta no devolvió registros.
+            </div>
+
+        `;
+
+        return;
+    }
+
+
+    const columns = Object.keys(rows[0]);
+
+
+    let html = `
+
+        <div class="result-header">
+
+            <h2>Resultado</h2>
+
+            <div class="result-actions">
+
+                <span class="row-count">
+                    ${data.rowCount}
+                    registro${data.rowCount === 1 ? "" : "s"}
+                </span>
+
+                <button
+                    class="export"
+                    onclick="exportarExcel()">
+                    📊 Exportar Excel
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <div class="table-container">
+
+            <table id="resultTable">
+
+                <thead>
+
+                    <tr>
+    `;
+
+
+    columns.forEach(column => {
+
+        html += `
+
+            <th>
+                ${escapeHtml(column)}
+            </th>
+
+        `;
+
+    });
+
+
+    html += `
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+    `;
+
+
+    rows.forEach(row => {
+
+        html += "<tr>";
+
+        columns.forEach(column => {
+
+            let value = row[column];
+
+            if (value === null || value === undefined) {
+                value = "";
+            }
+
+            if (typeof value === "object") {
+                value = JSON.stringify(value);
+            }
+
+            html += `
+
+                <td>
+                    ${escapeHtml(String(value))}
+                </td>
+
+            `;
+
+        });
+
+        html += "</tr>";
+
+    });
+
+
+    html += `
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    `;
+
+
+    resultContainer.innerHTML = html;
+
+}
+
+
+/* =========================================================
+   EXPORTAR EXCEL
+========================================================= */
+
+function exportarExcel() {
+
+    if (!resultadosActuales || resultadosActuales.length === 0) {
+
+        alert("No hay datos para exportar.");
+
+        return;
+    }
+
+
+    try {
+
+        // Crear una hoja de Excel directamente
+        const worksheet = XLSX.utils.json_to_sheet(resultadosActuales);
+
+
+        // Crear el libro de Excel
+        const workbook = XLSX.utils.book_new();
+
+
+        // Agregar la hoja
+        XLSX.utils.book_append_sheet(
+            workbook,
+            worksheet,
+            "Resultado"
+        );
+
+
+        // Ajustar automáticamente el ancho de las columnas
+        const columns = Object.keys(resultadosActuales[0]);
+
+        worksheet["!cols"] = columns.map(column => {
+
+            let maxLength = column.length;
+
+            resultadosActuales.forEach(row => {
+
+                let value = row[column];
+
+                if (value === null || value === undefined) {
+                    value = "";
+                }
+
+                if (typeof value === "object") {
+                    value = JSON.stringify(value);
+                }
+
+                const length = String(value).length;
+
+                if (length > maxLength) {
+                    maxLength = length;
+                }
+
+            });
+
+            // Limitar el ancho máximo
+            return {
+                wch: Math.min(maxLength + 2, 50)
+            };
+
+        });
+
+
+        // Activar autofiltro
+        worksheet["!autofilter"] = {
+            ref: worksheet["!ref"]
+        };
+
+
+        // Fecha para el nombre del archivo
+        const fecha = new Date()
+            .toISOString()
+            .slice(0, 10);
+
+
+        // Nombre final
+        const nombreArchivo =
+            `resultado_sql_${fecha}.xlsx`;
+
+
+        // Descargar Excel
+        XLSX.writeFile(
+            workbook,
+            nombreArchivo
+        );
+
+    } catch (error) {
+
+        console.error(error);
+
+        alert(
+            "No fue posible generar el archivo Excel."
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   LIMPIAR
+========================================================= */
+
+function limpiarConsulta() {
+
+    document.getElementById("sqlQuery").value = "";
+
+    document.getElementById("resultContainer").innerHTML = "";
+
+    resultadosActuales = [];
+
+    const status = document.getElementById("status");
+
+    status.className = "status waiting";
+
+    status.innerHTML = "⚪ Esperando consulta...";
+
+}
+
+
+/* =========================================================
+   ESCAPAR HTML
+========================================================= */
+
+function escapeHtml(value) {
+
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+}
+
+</script>
+
+</body>
+
+</html>
