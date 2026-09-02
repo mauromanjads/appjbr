@@ -465,12 +465,12 @@ function mostrarResultados(data) {
             <div class="kpi-grid" id="kpiGrid"></div>
             <div class="charts">
                 <div class="chart-card">
-                    <h3>Top productos por venta</h3>
+                    <h3>Top productos por venta ($)</h3>
                     <div class="chart-wrap"><canvas id="chartVentas"></canvas></div>
                 </div>
                 <div class="chart-card">
-                    <h3>Composición de importe</h3>
-                    <div class="chart-wrap"><canvas id="chartMix"></canvas></div>
+                    <h3>Top productos por venta (cantidades)</h3>
+                    <div class="chart-wrap"><canvas id="chartCantidad"></canvas></div>
                 </div>
                 <div class="chart-card">
                     <h3>Compra vs venta vs merma (unidades)</h3>
@@ -516,10 +516,17 @@ function pintarDashboard(rows) {
         return (aNumero(b.VentaTotal) || 0) - (aNumero(a.VentaTotal) || 0);
     }).slice(0, 8);
 
-    const labels = top.map(function (r) {
+    const topQty = rows.slice().sort(function (a, b) {
+        return (aNumero(b.CantidadVenta) || 0) - (aNumero(a.CantidadVenta) || 0);
+    }).slice(0, 8);
+
+    function etiquetaProducto(r) {
         const n = String(r.NombreProducto || r.CodigoProducto || "");
         return n.length > 22 ? n.slice(0, 21) + "…" : n;
-    });
+    }
+
+    const labels = top.map(etiquetaProducto);
+    const labelsQty = topQty.map(etiquetaProducto);
 
     const grid = "rgba(90, 200, 160, 0.12)";
     const ticks = { color: "#8aa89c" };
@@ -547,20 +554,23 @@ function pintarDashboard(rows) {
         }
     }));
 
-    graficos.push(new Chart(document.getElementById("chartMix"), {
-        type: "doughnut",
+    graficos.push(new Chart(document.getElementById("chartCantidad"), {
+        type: "bar",
         data: {
-            labels: ["Costo compra", "Venta", "Costo merma", "Inventario"],
+            labels: labelsQty,
             datasets: [{
-                data: [compraImp, ventaImp, mermaImp, invImp],
-                backgroundColor: ["#2ee6a8", "#7ad7ff", "#e6d08a", "#8aa89c"]
+                label: "Cantidad venta",
+                data: topQty.map(function (r) { return aNumero(r.CantidadVenta) || 0; }),
+                backgroundColor: "rgba(46, 230, 168, 0.75)"
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color: "#f4fffb" } }
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: ticks, grid: { color: grid } },
+                y: { ticks: ticks, grid: { color: grid } }
             }
         }
     }));
