@@ -505,12 +505,11 @@ function pintarDashboard(rows) {
     const ventaImp = sumaColumna(rows, "VentaTotal");
     const mermaImp = sumaColumna(rows, "CostoTotalMerma");
     const invImp = sumaColumna(rows, "ValorInventario");
-    const pctMerma = compraQty ? (mermaQty / compraQty) * 100 : 0;
 
     document.getElementById("kpiGrid").innerHTML =
         kpi("Compra", "Costo total", formatoNumero(compraImp, "CostoTotalCompra"), "Cantidad comprada  " + formatoNumero(compraQty, "CantidadCompra")) +
         kpi("Venta", "Importe vendido", formatoNumero(ventaImp, "VentaTotal"), "Cantidad vendida  " + formatoNumero(ventaQty, "CantidadVenta")) +
-        kpi("Merma", "% de merma sobre compra", formatoNumero(pctMerma) + " %", "Cantidad de merma  " + formatoNumero(mermaQty, "CantidadMerma")) +
+        kpi("Merma", "Costo de merma", formatoNumero(mermaImp, "CostoTotalMerma"), "Cantidad de merma  " + formatoNumero(mermaQty, "CantidadMerma")) +
         kpi("Inventario", "Valor en inventario", formatoNumero(invImp, "ValorInventario"), "Existencia actual  " + formatoNumero(existQty, "ExistenciaActual"));
 
     const top = rows.slice().sort(function (a, b) {
