@@ -455,8 +455,14 @@ tfoot td {
     color: var(--muted);
 }
 
+.kpi-caption {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--muted);
+}
+
 .kpi-value {
-    margin-top: 8px;
+    margin-top: 2px;
     font-size: 22px;
     font-weight: 700;
     color: var(--text);
