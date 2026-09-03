@@ -6,8 +6,8 @@ const supabase = require("./lib/supabase");
 const { leerProductos } = require("./lib/productos");
 const { leerClientes } = require("./lib/clientes");
 const { leerBodegas } = require("./lib/bodegas");
-const { migrarFacturas } = require("./lib/migrar-facturas");
-const { migrarCompras } = require("./lib/migrar-compras");
+// migrarFacturas y migrarCompras se cargan de forma lazy dentro de cada ruta
+// porque estos módulos son solo locales y no existen en producción (Vercel)
 
 const app = express();
 const LOTE = 100;
@@ -172,16 +172,20 @@ app.post("/api/migrar/facturas", async (req, res) => {
   req.setTimeout(0);
   res.setTimeout(0);
 
+  let migrarFacturas;
+  try {
+    ({ migrarFacturas } = require("./lib/migrar-facturas"));
+  } catch (_) {
+    return res.status(503).json({ ok: false, error: "Módulo de migración no disponible en este entorno." });
+  }
+
   try {
     const resultado = await migrarFacturas(config, function (msg) {
       console.log(msg);
     });
     return res.json(Object.assign({ ok: true }, resultado));
   } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      error: error.message
-    });
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 
@@ -189,16 +193,20 @@ app.post("/api/migrar/compras", async (req, res) => {
   req.setTimeout(0);
   res.setTimeout(0);
 
+  let migrarCompras;
+  try {
+    ({ migrarCompras } = require("./lib/migrar-compras"));
+  } catch (_) {
+    return res.status(503).json({ ok: false, error: "Módulo de migración no disponible en este entorno." });
+  }
+
   try {
     const resultado = await migrarCompras(config, function (msg) {
       console.log(msg);
     });
     return res.json(Object.assign({ ok: true }, resultado));
   } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      error: error.message
-    });
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 
