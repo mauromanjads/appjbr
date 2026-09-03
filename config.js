@@ -18,5 +18,9 @@ module.exports = {
   codigoCuenta: process.env.CODIGO_CUENTA || "023WA",
   productosExcel: path.join(__dirname, "datos", "productos.xlsx"),
   clientesExcel: path.join(__dirname, "datos", "clientes.xlsx"),
-  bodegasExcel: path.join(__dirname, "datos", "bodegas.xlsx")
+  bodegasExcel: path.join(__dirname, "datos", "bodegas.xlsx"),
+  facturasExcel: path.join(__dirname, "datos", "facturas.xlsx"),
+  facturaLineasDir: path.join(__dirname, "datos"),
+  comprasExcel: path.join(__dirname, "datos", "compras.xlsx"),
+  compraLineasDir: path.join(__dirname, "datos")
 };

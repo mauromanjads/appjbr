@@ -6,6 +6,8 @@ const supabase = require("./lib/supabase");
 const { leerProductos } = require("./lib/productos");
 const { leerClientes } = require("./lib/clientes");
 const { leerBodegas } = require("./lib/bodegas");
+const { migrarFacturas } = require("./lib/migrar-facturas");
+const { migrarCompras } = require("./lib/migrar-compras");
 
 const app = express();
 const LOTE = 100;
@@ -158,6 +160,40 @@ app.post("/api/migrar/bodegas", async (_req, res) => {
       omitidos: omitidos.length,
       codigo_cuenta: config.codigoCuenta
     });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+app.post("/api/migrar/facturas", async (req, res) => {
+  req.setTimeout(0);
+  res.setTimeout(0);
+
+  try {
+    const resultado = await migrarFacturas(config, function (msg) {
+      console.log(msg);
+    });
+    return res.json(Object.assign({ ok: true }, resultado));
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
+app.post("/api/migrar/compras", async (req, res) => {
+  req.setTimeout(0);
+  res.setTimeout(0);
+
+  try {
+    const resultado = await migrarCompras(config, function (msg) {
+      console.log(msg);
+    });
+    return res.json(Object.assign({ ok: true }, resultado));
   } catch (error) {
     return res.status(500).json({
       ok: false,

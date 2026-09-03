@@ -32,8 +32,9 @@
 
             <div class="actions">
                 <button class="execute" onclick="ejecutarConsulta()">Ejecutar</button>
+                <button class="export" onclick="descargarExcel()">Descargar Excel</button>
                 <button class="clear" onclick="limpiarConsulta()">Limpiar</button>
-                <span class="info">Solo se permiten consultas SELECT</span>
+                <span class="info">La grilla solo muestra 200 filas. El Excel trae todas.</span>
             </div>
 
             <div class="warning">
@@ -52,45 +53,79 @@ document.getElementById("fechaHoy").textContent =
     "Fecha " + new Date().toLocaleDateString("es-MX");
 
 const API_URL = "https://fleshed-jittery-swiftly.ngrok-free.dev/query";
+const PREVIEW_MAX = 200;
 
 let resultadosActuales = [];
+
+async function consultarSql() {
+    const query = document.getElementById("sqlQuery").value.trim();
+
+    if (!query) {
+        throw new Error("Escribe una consulta SQL");
+    }
+
+    const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true"
+        },
+        body: JSON.stringify({ query: query })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+        throw new Error(data.error || "Error ejecutando la consulta");
+    }
+
+    return data;
+}
 
 async function ejecutarConsulta() {
 
     const status = document.getElementById("status");
     const resultContainer = document.getElementById("resultContainer");
-    const query = document.getElementById("sqlQuery").value.trim();
-
-    if (!query) {
-        status.className = "status error";
-        status.innerHTML = "Escribe una consulta SQL";
-        return;
-    }
 
     status.className = "status waiting";
     status.innerHTML = "Ejecutando consulta...";
     resultContainer.innerHTML = "";
 
     try {
-        const response = await fetch(API_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "ngrok-skip-browser-warning": "true"
-            },
-            body: JSON.stringify({ query: query })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-            throw new Error(data.error || "Error ejecutando la consulta");
-        }
-
+        const data = await consultarSql();
         status.className = "status success";
         status.innerHTML = "Consulta ejecutada correctamente";
         mostrarResultados(data);
+    } catch (error) {
+        status.className = "status error";
+        status.innerHTML = "Error";
+        resultContainer.innerHTML = `
+            <div class="warning">${escapeHtml(error.message)}</div>
+        `;
+    }
+}
 
+async function descargarExcel() {
+
+    const status = document.getElementById("status");
+    const resultContainer = document.getElementById("resultContainer");
+
+    status.className = "status waiting";
+    status.innerHTML = "Consultando y armando Excel... no se pinta la grilla";
+    resultContainer.innerHTML = "";
+
+    try {
+        const data = await consultarSql();
+        resultadosActuales = data.rows || [];
+        exportarExcel();
+        status.className = "status success";
+        status.innerHTML = resultadosActuales.length.toLocaleString("es-MX") +
+            " registros exportados a Excel (sin grilla)";
+        resultContainer.innerHTML = `
+            <div class="empty">
+                Listo. El archivo se descargó. La tabla no se dibujó para no saturar el navegador.
+            </div>
+        `;
     } catch (error) {
         status.className = "status error";
         status.innerHTML = "Error";
@@ -118,18 +153,22 @@ function mostrarResultados(data) {
     }
 
     const columns = Object.keys(rows[0]);
+    const preview = rows.slice(0, PREVIEW_MAX);
+    const recortada = rows.length > PREVIEW_MAX;
 
     let html = `
         <div class="result-header">
             <h2>Resultado</h2>
             <div class="result-actions">
                 <span class="row-count">
-                    ${data.rowCount}
-                    registro${data.rowCount === 1 ? "" : "s"}
+                    ${Number(data.rowCount || rows.length).toLocaleString("es-MX")}
+                    registro${rows.length === 1 ? "" : "s"}
+                    ${recortada ? " · vista previa " + PREVIEW_MAX : ""}
                 </span>
                 <button class="export" onclick="exportarExcel()">Exportar Excel</button>
             </div>
         </div>
+        ${recortada ? "<div class=\"warning\">La grilla solo muestra " + PREVIEW_MAX + " filas. Usa Exportar Excel para el archivo completo.</div>" : ""}
         <div class="table-container">
             <table id="resultTable">
                 <thead><tr>
@@ -141,7 +180,7 @@ function mostrarResultados(data) {
 
     html += "</tr></thead><tbody>";
 
-    rows.forEach((row) => {
+    preview.forEach((row) => {
         html += "<tr>";
         columns.forEach((column) => {
             let value = row[column];
@@ -173,9 +212,10 @@ function exportarExcel() {
         XLSX.utils.book_append_sheet(workbook, worksheet, "Resultado");
 
         const columns = Object.keys(resultadosActuales[0]);
+        const muestra = resultadosActuales.slice(0, 80);
         worksheet["!cols"] = columns.map((column) => {
             let maxLength = column.length;
-            resultadosActuales.forEach((row) => {
+            muestra.forEach((row) => {
                 let value = row[column];
                 if (value === null || value === undefined) {
                     value = "";

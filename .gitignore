@@ -1,2 +1,12 @@
 node_modules/
 .env
+
+# Datos locales de migración (no subir al repo)
+datos/
+scripts/
+lib/facturas.js
+lib/compras.js
+lib/migrar-facturas.js
+lib/migrar-compras.js
+public/consultas/migracion-facturas-encabezado.sql
+public/consultas/migracion-facturas-lineas.sql

@@ -31,6 +31,8 @@
             <button id="btnProductos" onclick="migrarProductos()">Migrar productos</button>
             <button id="btnClientes" onclick="migrarClientes()">Migrar clientes</button>
             <button id="btnBodegas" onclick="migrarBodegas()">Migrar bodegas</button>
+            <button id="btnFacturas" onclick="migrarFacturas()">Migrar facturas</button>
+            <button id="btnCompras" onclick="migrarCompras()">Migrar compras</button>
         </div>
 
         <div id="detalle"></div>
@@ -184,6 +186,94 @@ async function migrarBodegas() {
     } catch (error) {
         status.className = "status error";
         status.textContent = "No se pudieron migrar las bodegas";
+        detalle.innerHTML = `<div class="warning">${escapeHtml(error.message)}</div>`;
+    } finally {
+        boton.disabled = false;
+    }
+}
+
+async function migrarFacturas() {
+
+    const status = document.getElementById("status");
+    const detalle = document.getElementById("detalle");
+    const boton = document.getElementById("btnFacturas");
+
+    detalle.innerHTML = "";
+    boton.disabled = true;
+    status.className = "status waiting";
+    status.textContent = "Migrando facturas... puede tardar varios minutos";
+
+    try {
+        const response = await fetch("/api/migrar/facturas", { method: "POST" });
+        const data = await leerJson(response);
+
+        if (!response.ok || !data.ok) {
+            throw new Error(data.error || "Error migrando facturas");
+        }
+
+        status.className = "status success";
+        status.textContent =
+            data.encabezados + " órdenes y " + data.lineas + " líneas en " + data.codigo_cuenta;
+
+        const extras = [];
+        if (data.omitidos_encabezado) {
+            extras.push(data.omitidos_encabezado + " encabezado(s) omitido(s)");
+        }
+        if (data.omitidos_linea) {
+            extras.push(data.omitidos_linea + " línea(s) omitida(s)");
+        }
+        if (extras.length) {
+            detalle.innerHTML = `<div class="warning">${escapeHtml(extras.join(" · "))}</div>`;
+        }
+
+    } catch (error) {
+        status.className = "status error";
+        status.textContent = "No se pudieron migrar las facturas";
+        detalle.innerHTML = `<div class="warning">${escapeHtml(error.message)}</div>`;
+    } finally {
+        boton.disabled = false;
+    }
+}
+
+async function migrarCompras() {
+
+    const status = document.getElementById("status");
+    const detalle = document.getElementById("detalle");
+    const boton = document.getElementById("btnCompras");
+
+    detalle.innerHTML = "";
+    boton.disabled = true;
+    status.className = "status waiting";
+    status.textContent = "Migrando compras... puede tardar varios minutos";
+
+    try {
+        const response = await fetch("/api/migrar/compras", { method: "POST" });
+        const data = await leerJson(response);
+
+        if (!response.ok || !data.ok) {
+            throw new Error(data.error || "Error migrando compras");
+        }
+
+        status.className = "status success";
+        status.textContent =
+            data.proveedores + " proveedores, " +
+            data.encabezados + " OC y " +
+            data.lineas + " líneas en " + data.codigo_cuenta;
+
+        const extras = [];
+        if (data.omitidos_encabezado) {
+            extras.push(data.omitidos_encabezado + " encabezado(s) omitido(s)");
+        }
+        if (data.omitidos_linea) {
+            extras.push(data.omitidos_linea + " línea(s) omitida(s)");
+        }
+        if (extras.length) {
+            detalle.innerHTML = `<div class="warning">${escapeHtml(extras.join(" · "))}</div>`;
+        }
+
+    } catch (error) {
+        status.className = "status error";
+        status.textContent = "No se pudieron migrar las compras";
         detalle.innerHTML = `<div class="warning">${escapeHtml(error.message)}</div>`;
     } finally {
         boton.disabled = false;
