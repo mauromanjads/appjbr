@@ -6,6 +6,7 @@ const supabase = require("./lib/supabase");
 const { leerProductos } = require("./lib/productos");
 const { leerClientes } = require("./lib/clientes");
 const { leerBodegas } = require("./lib/bodegas");
+const { fechasDesdeQuery, consultarTableroRapido } = require("./lib/tablero-inventario");
 // migrarFacturas y migrarCompras se cargan de forma lazy dentro de cada ruta
 // porque estos módulos son solo locales y no existen en producción (Vercel)
 
@@ -207,6 +208,43 @@ app.post("/api/migrar/compras", async (req, res) => {
     return res.json(Object.assign({ ok: true }, resultado));
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/tablero/inventario", async (req, res) => {
+  req.setTimeout(0);
+  res.setTimeout(0);
+
+  const body = req.body || {};
+  let fechaInicio = body.fecha_inicio;
+  let fechaFin = body.fecha_fin;
+
+  if (!fechaInicio || !fechaFin) {
+    const parsed = fechasDesdeQuery(body.query || "");
+    if (parsed) {
+      fechaInicio = parsed.fechaInicio;
+      fechaFin = parsed.fechaFin;
+    }
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaInicio || "") || !/^\d{4}-\d{2}-\d{2}$/.test(fechaFin || "")) {
+    return res.status(400).json({
+      success: false,
+      error: "Indica fecha_inicio y fecha_fin (YYYY-MM-DD)"
+    });
+  }
+
+  try {
+    const rows = await consultarTableroRapido(config, fechaInicio, fechaFin);
+    return res.json({
+      success: true,
+      rows
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 

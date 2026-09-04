@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Polaria · Tablero 1</title>
+    <title>Polaria · Tablero Supabase</title>
     <link rel="stylesheet" href="./css/polaria.css">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -15,16 +15,16 @@
     <a class="brand" href="./index.html"><span>✦</span> polaria</a>
     <nav class="topbar-nav">
         <a href="./index.html">Explorer</a>
-        <a class="active" href="./dashboard.html">Tablero SQL</a>
-        <a href="./dashboard-supabase.html">Tablero SB</a>
+        <a href="./dashboard.html">Tablero SQL</a>
+        <a class="active" href="./dashboard-supabase.html">Tablero SB</a>
         <a href="./migracion.html">Migración</a>
     </nav>
 </header>
 
 <div class="page">
-    <div class="crumb">Inicio / <b>Tablero 1</b></div>
+    <div class="crumb">Inicio / <b>Tablero Supabase</b></div>
     <h1>Compras, ventas e inventario</h1>
-    <p class="subtitle">SQL Server · rango de fechas sobre movimientos · inventario actual almacén 8</p>
+    <p class="subtitle">Supabase · rango de fechas sobre compra, venta y merma · inventario actual almacén 8</p>
 
     <div class="container">
         <div id="status" class="status waiting">Elige el rango de fechas y carga el tablero</div>
@@ -40,7 +40,7 @@
             </div>
             <div class="actions">
                 <button id="btnCargar" class="execute" onclick="cargarTablero()">Cargar tablero</button>
-                <span class="info">Consulta: consultas/tablero-1-inventario.sql</span>
+                <span class="info">Supabase · fechas como parámetros</span>
             </div>
         </div>
 
@@ -54,11 +54,10 @@
 document.getElementById("fechaHoy").textContent =
     "Fecha " + new Date().toLocaleDateString("es-MX");
 
-const API_URL = "https://fleshed-jittery-swiftly.ngrok-free.dev/query";
-const SQL_URL = "./consultas/tablero-1-inventario.sql";
+const API_URL = "/api/tablero/inventario";
 
 const EXCLUIR_SUMA = /^(id|idproducto|codigoproducto|codigo|sku|nombreproducto|nombre|unidad)$/i;
-const OCULTAR_COLUMNAS = /^(unidad|cabreviatura)$/i;
+const OCULTAR_COLUMNAS = /^(unidad|cabreviatura|idproducto)$/i;
 const RATIOS = {
     CostoUnitario: ["CostoTotalCompra", "CantidadCompra"],
     VentaUnitaria: ["VentaTotal", "CantidadVenta"],
@@ -93,7 +92,6 @@ let columnasTabla = [];
 let numericasTabla = {};
 let filtrosTabla = {};
 let ordenTabla = { col: null, dir: 1 };
-let plantillaSql = null;
 let graficos = [];
 
 function esFechaIso(valor) {
@@ -187,29 +185,6 @@ function totalColumna(nombre, rows) {
     return sumaColumna(rows, nombre);
 }
 
-async function obtenerPlantilla() {
-    if (plantillaSql) {
-        return plantillaSql;
-    }
-
-    const response = await fetch(SQL_URL, {
-        headers: { "ngrok-skip-browser-warning": "true" }
-    });
-
-    if (!response.ok) {
-        throw new Error("No se pudo leer consultas/tablero-1-inventario.sql");
-    }
-
-    plantillaSql = await response.text();
-    return plantillaSql;
-}
-
-function armarConsulta(plantilla, fechaInicio, fechaFin) {
-    return plantilla
-        .split("__FECHA_INICIO__").join(fechaInicio)
-        .split("__FECHA_FIN__").join(fechaFin);
-}
-
 async function cargarTablero() {
 
     const status = document.getElementById("status");
@@ -241,16 +216,13 @@ async function cargarTablero() {
     status.textContent = "Cargando tablero " + fechaInicio + " a " + fechaFin + "...";
 
     try {
-        const plantilla = await obtenerPlantilla();
-        const query = armarConsulta(plantilla, fechaInicio, fechaFin);
-
         const response = await fetch(API_URL, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "ngrok-skip-browser-warning": "true"
-            },
-            body: JSON.stringify({ query: query })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                fecha_inicio: fechaInicio,
+                fecha_fin: fechaFin
+            })
         });
 
         const data = await response.json();
@@ -657,7 +629,7 @@ function exportarExcel() {
 
         const inicio = document.getElementById("fechaInicio").value;
         const fin = document.getElementById("fechaFin").value;
-        XLSX.writeFile(workbook, "tablero_1_" + inicio + "_" + fin + ".xlsx");
+        XLSX.writeFile(workbook, "tablero_sb_" + inicio + "_" + fin + ".xlsx");
 
     } catch (error) {
         console.error(error);

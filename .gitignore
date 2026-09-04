@@ -10,3 +10,8 @@ lib/migrar-facturas.js
 lib/migrar-compras.js
 public/consultas/migracion-facturas-encabezado.sql
 public/consultas/migracion-facturas-lineas.sql
+public/consultas/migracion-merma.sql
+public/consultas/migracion-inventario-capas.sql
+public/consultas/migracion-lineas-totales-venta.sql
+public/consultas/migracion-lineas-totales-compra.sql
+public/consultas/migracion-compra-fecha-movimiento.sql
