@@ -16,6 +16,9 @@ module.exports = {
   },
 
   codigoCuenta: process.env.CODIGO_CUENTA || "023WA",
+  sqlApiUrl:
+    process.env.SQL_API_URL ||
+    "https://fleshed-jittery-swiftly.ngrok-free.dev/query",
   productosExcel: path.join(__dirname, "datos", "productos.xlsx"),
   clientesExcel: path.join(__dirname, "datos", "clientes.xlsx"),
   bodegasExcel: path.join(__dirname, "datos", "bodegas.xlsx"),

@@ -114,6 +114,10 @@ h1 {
     letter-spacing: -0.03em;
 }
 
+.titulo-explorer {
+    font-size: 22px;
+}
+
 .subtitle,
 .info {
     color: var(--muted);
@@ -208,7 +212,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 textarea {
-    min-height: 180px;
+    min-height: 420px;
     resize: vertical;
     font-family: Consolas, ui-monospace, monospace;
     line-height: 1.5;
